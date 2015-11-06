@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	"os"
 	//"encoding/json"
 	"github.com/streadway/amqp"
 )
@@ -16,7 +17,9 @@ func failOnError(err error, msg string) {
 }
 
 func main() {
-	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+	args := os.Args
+	//conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+	conn, err := amqp.Dial(args[1])
 	failOnError(err, "Failed to connect to RabbitMQ")
 	defer conn.Close()
 
@@ -25,7 +28,7 @@ func main() {
 	defer ch.Close()
 
 	q, err := ch.QueueDeclare(
-		"hello", // name
+		args[2], // name
 		false,   // durable
 		false,   // delete when usused
 		false,   // exclusive
@@ -48,14 +51,18 @@ func main() {
 	forever := make(chan bool)
 
 	go func() {
+		firstId := "EMPTY"
 		for d := range msgs {
-			//jsonBody, err := json.Marshal(d)
-			//failOnError(err, "Failed to parse message")
-			//log.Printf("Received a message: %s", string(jsonBody))
-			fmt.Println(string(d.Body))
-			d.Nack(false, true)
-			break
+			if d.MessageId == firstId {
+				break
+			}
 
+			if firstId == "EMPTY" {
+				firstId = d.MessageId
+			}
+
+			fmt.Println(string(d.Body), ",")
+			d.Nack(false, true)
 		}
 	}()
 
