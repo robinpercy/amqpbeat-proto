@@ -51,15 +51,14 @@ func main() {
 	forever := make(chan bool)
 
 	go func() {
-		firstId := "EMPTY"
+		firstId := 0
 		for d := range msgs {
-			if d.MessageId == firstId {
-				break
-			}
 
-			if firstId == "EMPTY" {
-				firstId = d.MessageId
-			}
+			if firstId > 1000 {
+                                break
+			} else {
+                                firstId++
+                        }
 
 			fmt.Println(string(d.Body), ",")
 			d.Nack(false, true)
