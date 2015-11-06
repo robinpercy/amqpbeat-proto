@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	//"encoding/json"
 	"github.com/streadway/amqp"
 )
 
@@ -26,25 +27,38 @@ func main() {
 	q, err := ch.QueueDeclare(
 		"hello", // name
 		false,   // durable
-		false,   // delete when unused
+		false,   // delete when usused
 		false,   // exclusive
 		false,   // no-wait
 		nil,     // arguments
 	)
 	failOnError(err, "Failed to declare a queue")
 
-	body := "hello"
-	for i := 0; i < 10; i++ {
-		err = ch.Publish(
-			"",     // exchange
-			q.Name, // routing key
-			false,  // mandatory
-			false,  // immediate
-			amqp.Publishing{
-				MessageId:   fmt.Sprintf("%d", i),
-				ContentType: "text/plain",
-				Body:        []byte(body),
-			})
-		failOnError(err, "Failed to publish a message")
-	}
+	msgs, err := ch.Consume(
+		q.Name, // queue
+		"",     // consumer
+		false,  // auto-ack
+		false,  // exclusive
+		false,  // no-local
+		false,  // no-wait
+		nil,    // args
+	)
+	failOnError(err, "Failed to register a consumer")
+
+	forever := make(chan bool)
+
+	go func() {
+		for d := range msgs {
+			//jsonBody, err := json.Marshal(d)
+			//failOnError(err, "Failed to parse message")
+			//log.Printf("Received a message: %s", string(jsonBody))
+			fmt.Println(string(d.Body))
+			d.Nack(false, true)
+			break
+
+		}
+	}()
+
+	log.Printf(" [*] Waiting for messages. To exit press CTRL+C")
+	<-forever
 }
