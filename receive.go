@@ -55,10 +55,10 @@ func main() {
 		for d := range msgs {
 
 			if firstId > 1000 {
-                                break
+				break
 			} else {
-                                firstId++
-                        }
+				firstId++
+			}
 
 			fmt.Println(string(d.Body), ",")
 			d.Nack(false, true)
