@@ -8,8 +8,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/elastic/libbeat/cfgfile"
 	"github.com/elastic/libbeat/logp"
-	"github.com/robinpercy/melllvar/utils"
+	"github.com/robinpercy/ampqbeat/utils"
 	//	"github.com/elastic/libbeat/cfgfile"
 	//	"encoding/json"
 	"github.com/elastic/libbeat/beat"
@@ -22,24 +23,7 @@ import (
 // more AMQP channels
 type Amqpbeat struct {
 	events publisher.Client
-}
-
-type consumerCfg struct {
-	qName     string
-	consumer  string
-	autoAck   bool
-	exclusive bool
-	noLocal   bool
-	args      *amqp.Table
-}
-
-func (c *consumerCfg) init(name string) {
-	c.qName = name
-	c.consumer = ""
-	c.autoAck = false
-	c.exclusive = false
-	c.noLocal = false
-	c.args = new(amqp.Table)
+	config ConfigSettings
 }
 
 func startConsuming(uri string, qName string, payloads chan<- []byte) {
@@ -75,10 +59,26 @@ func startConsuming(uri string, qName string, payloads chan<- []byte) {
 	fmt.Println("Finished consuming")
 }
 
+// ChannelConfig ...
+type ChannelConfig struct {
+	Name *string
+}
+
+// AmqpConfig ...
+type AmqpConfig struct {
+	Channels *[]ChannelConfig
+}
+
+type ConfigSettings struct {
+	Amqpconfig AmqpConfig
+}
+
 // Config extracts settings from the config file
 func (mb *Amqpbeat) Config(b *beat.Beat) error {
+
 	// Config loading goes here
-	//err := cfgfile.Read("/etc/Mellvar/Melllvar.cfg", "")
+	err := cfgfile.Read(&mb.config, "")
+	utils.FailOnError(err, "Error reading configuration file")
 	//if err != nil {
 	//		logp.Err("Error reading configuration file: %v", err)
 	//		return err
@@ -91,7 +91,7 @@ func (mb *Amqpbeat) Config(b *beat.Beat) error {
 // Setup ...
 func (mb *Amqpbeat) Setup(b *beat.Beat) error {
 	mb.events = b.Events
-	logp.Debug("melllvar", " is setup")
+	logp.Debug("ampqbeat", " is setup")
 	return nil
 }
 
@@ -99,7 +99,10 @@ func (mb *Amqpbeat) Setup(b *beat.Beat) error {
 func (mb *Amqpbeat) Run(b *beat.Beat) error {
 	args := os.Args
 	payloads := make(chan []byte)
-	go startConsuming(args[1], args[2], payloads)
+	fmt.Println(mb.config.Amqpconfig)
+	fmt.Println((*mb.config.Amqpconfig.Channels)[0])
+	fmt.Println((*mb.config.Amqpconfig.Channels)[0].Name)
+	go startConsuming(args[1], *(*mb.config.Amqpconfig.Channels)[0].Name, payloads)
 
 	for p := range payloads {
 		var event map[string]interface{}
@@ -131,7 +134,7 @@ func check(e error) {
 
 func main() {
 	mb := &Amqpbeat{}
-	b := beat.NewBeat("Melllvar", "0.1", mb)
+	b := beat.NewBeat("amqpbeat", "0.1", mb)
 	b.CommandLineSetup()
 	b.LoadConfig()
 	mb.Config(b)
