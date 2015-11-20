@@ -10,7 +10,8 @@ import (
 
 	"github.com/elastic/libbeat/cfgfile"
 	"github.com/elastic/libbeat/logp"
-	"github.com/robinpercy/ampqbeat/utils"
+	cfg "github.com/robinpercy/amqpbeat/config"
+	"github.com/robinpercy/amqpbeat/utils"
 	//	"github.com/elastic/libbeat/cfgfile"
 	//	"encoding/json"
 	"github.com/elastic/libbeat/beat"
@@ -23,7 +24,7 @@ import (
 // more AMQP channels
 type Amqpbeat struct {
 	events publisher.Client
-	config ConfigSettings
+	config cfg.Settings
 }
 
 func startConsuming(uri string, qName string, payloads chan<- []byte) {
@@ -59,20 +60,6 @@ func startConsuming(uri string, qName string, payloads chan<- []byte) {
 	fmt.Println("Finished consuming")
 }
 
-// ChannelConfig ...
-type ChannelConfig struct {
-	Name *string
-}
-
-// AmqpConfig ...
-type AmqpConfig struct {
-	Channels *[]ChannelConfig
-}
-
-type ConfigSettings struct {
-	Amqpconfig AmqpConfig
-}
-
 // Config extracts settings from the config file
 func (mb *Amqpbeat) Config(b *beat.Beat) error {
 
@@ -99,10 +86,10 @@ func (mb *Amqpbeat) Setup(b *beat.Beat) error {
 func (mb *Amqpbeat) Run(b *beat.Beat) error {
 	args := os.Args
 	payloads := make(chan []byte)
-	fmt.Println(mb.config.Amqpconfig)
-	fmt.Println((*mb.config.Amqpconfig.Channels)[0])
-	fmt.Println((*mb.config.Amqpconfig.Channels)[0].Name)
-	go startConsuming(args[1], *(*mb.config.Amqpconfig.Channels)[0].Name, payloads)
+	fmt.Println(mb.config.AmqpInput)
+	fmt.Println((*mb.config.AmqpInput.Channels)[0])
+	fmt.Println((*mb.config.AmqpInput.Channels)[0].Name)
+	go startConsuming(args[1], *(*mb.config.AmqpInput.Channels)[0].Name, payloads)
 
 	for p := range payloads {
 		var event map[string]interface{}
