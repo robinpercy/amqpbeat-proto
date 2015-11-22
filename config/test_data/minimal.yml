@@ -1,0 +1,3 @@
+amqpinput:
+  channels:
+    - name: "test"
