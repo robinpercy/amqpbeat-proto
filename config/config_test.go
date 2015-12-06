@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/elastic/libbeat/cfgfile"
@@ -19,7 +20,6 @@ func TestComplainsWhenChannelsMissing(t *testing.T) {
 	if len(err.ErrorMap) != 1 {
 		t.Errorf("Expected exactly one error, got %d", len(err.ErrorMap))
 	}
-	fmt.Printf("%+v", err)
 }
 
 func TestComplainsWhenChannelNameMissing(t *testing.T) {
@@ -41,12 +41,52 @@ func TestNilChannelValidationShortCircuits(t *testing.T) {
 	}
 }
 
-func TestConfigErrorMapGivesEmptyString(t *testing.T) {
+func TestConfigErrorMapConcatsMessages(t *testing.T) {
+	errMap := make(errorMap)
+	errMap["foo1"] = "bar1"
+	errMap["foo2"] = "bar2"
+	errStr := ErrorFor(errMap).Error()
+	for k, v := range errMap {
+		expected := fmt.Sprintf("%s: %s\n", k, v)
+		if !strings.Contains(errStr, expected) {
+			t.Errorf("%q does not contain: %q", errStr, expected)
+		}
+	}
+}
+
+func TestEmptyConfigErrorMapGivesEmptyString(t *testing.T) {
 	tests := []ConfigError{ConfigError{ErrorMap: make(errorMap)}, ConfigError{ErrorMap: nil}}
 	for _, err := range tests {
 		if err.Error() != "" {
 			t.Errorf("Expected empty string, got '%s'", err.Error())
 		}
+	}
+}
+
+func TestAllChannelValuesSet(t *testing.T) {
+	settings := loadFile("./test_data/full.yml")
+	if settings == nil {
+		t.Errorf("Settings should not be nil")
+	}
+	if settings.AmqpInput == nil {
+		t.Errorf("AmqpInput should not be nil")
+	}
+	if settings.AmqpInput.Channels == nil {
+		t.Errorf("Channels should not be nil")
+	}
+	if len(*settings.AmqpInput.Channels) != 1 {
+		t.Errorf("Channels should not be empty")
+	}
+
+	c0 := (*settings.AmqpInput.Channels)[0]
+	if *c0.Name != "test" {
+		t.Errorf("Expected %s, got %s", "test", *c0.Name)
+	}
+	if *c0.Required != true {
+		t.Errorf("Expected true, got %d", *c0.Required)
+	}
+	if *c0.MaxBatchSize != 100 {
+		t.Errorf("Expected 100  got %d", *c0.MaxBatchSize)
 	}
 }
 

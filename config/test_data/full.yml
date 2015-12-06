@@ -1,0 +1,11 @@
+amqpinput:
+  dryrun: true
+  maxdryrunmsgs: 10
+
+  channels:
+    - name: "test"
+      required: true
+      maxbatchsize: 100
+      minintervalms: 100
+      maxintervalms: 1000
+      maxmessagespersec: 10

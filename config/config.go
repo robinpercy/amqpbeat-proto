@@ -5,12 +5,18 @@ import "strings"
 
 // ChannelConfig ...
 type ChannelConfig struct {
-	Name *string
+	Name              *string
+	Required          *bool
+	MaxBatchSize      *int
+	MaxIntervalMS     *int
+	MinIntervalMS     *int
+	MaxMessagesPerSec *int
 }
 
 // AmqpConfig ...
 type AmqpConfig struct {
-	Channels *[]ChannelConfig
+	ServerURI *string
+	Channels  *[]ChannelConfig
 }
 
 // Settings ...
