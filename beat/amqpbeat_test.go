@@ -129,13 +129,19 @@ func TestCanReceiveMessage(t *testing.T) {
 	defer conn.Close()
 	defer ch.Close()
 
-	p := newPublisher("", "tets", ch)
-	p.send(ch, "This is a test")
+	payload := "This is a test"
+
+	p := newPublisher("", "test", ch)
+	p.send(ch, payload)
 
 	received := false
 	client := &MockClient{
 		eventsPublished: func(events []common.MapStr, ab *Amqpbeat) {
 			received = true
+			if events[0]["payload"] != payload {
+				t.Errorf("Expected payload: '%s' but received '%s'",
+					payload, events[0]["payload"])
+			}
 			ab.Stop()
 		},
 	}

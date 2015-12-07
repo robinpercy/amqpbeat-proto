@@ -1,4 +1,5 @@
 amqpinput:
+  serveruri: "amqp://guest:guest@localhost:5672/" 
   dryrun: true
   maxdryrunmsgs: 10
 

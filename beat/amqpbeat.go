@@ -3,11 +3,8 @@ package beat
 import (
 	//	"bufio"
 
-	"time"
-
 	"github.com/elastic/libbeat/beat"
 	"github.com/elastic/libbeat/cfgfile"
-	"github.com/elastic/libbeat/common"
 	"github.com/elastic/libbeat/publisher"
 	cfg "github.com/robinpercy/amqpbeat/config"
 	"github.com/robinpercy/amqpbeat/utils"
@@ -16,10 +13,11 @@ import (
 // Amqpbeat is a beat.Beater implementation that consumes events from one or
 // more AMQP channels
 type Amqpbeat struct {
-	config  cfg.Settings
-	events  publisher.Client
-	stopped bool
-	stop    chan bool
+	config       cfg.Settings
+	events       publisher.Client
+	consumerPool *ConsumerPool
+	stopped      bool
+	stop         chan bool
 }
 
 // Config extracts settings from the config file
@@ -39,21 +37,29 @@ func (ab *Amqpbeat) ConfigWithFile(b *beat.Beat, path string) error {
 func (ab *Amqpbeat) Setup(b *beat.Beat) error {
 	ab.events = b.Events
 	ab.stop = make(chan bool)
-
+	ab.consumerPool = newConsumerPool(ab.config.AmqpInput)
 	return nil
 }
 
 // Run ...
 func (ab *Amqpbeat) Run(b *beat.Beat) error {
-	event := common.MapStr{
-		"@timestamp": common.Time(time.Now()),
-		"type":       "test",
-		"payload":    "test",
-	}
+	/*
+		event := common.MapStr{
+			"@timestamp": common.Time(time.Now()),
+			"type":       "test",
+			"payload":    "test",
+		}
+	*/
 
-	go ab.events.PublishEvents([]common.MapStr{event}, nil)
-	select {
-	case <-ab.stop:
+	events := ab.consumerPool.run()
+
+	for {
+		select {
+		case e := <-events:
+			ab.events.PublishEvents(e, nil)
+		case <-ab.stop:
+			break
+		}
 	}
 
 	//fmt.Println("ab.events: %v", ab.events)
