@@ -3,9 +3,11 @@ package beat
 import (
 	//	"bufio"
 
+	"time"
+
 	"github.com/elastic/libbeat/beat"
 	"github.com/elastic/libbeat/cfgfile"
-	"github.com/elastic/libbeat/logp"
+	"github.com/elastic/libbeat/common"
 	"github.com/elastic/libbeat/publisher"
 	cfg "github.com/robinpercy/amqpbeat/config"
 	"github.com/robinpercy/amqpbeat/utils"
@@ -14,9 +16,10 @@ import (
 // Amqpbeat is a beat.Beater implementation that consumes events from one or
 // more AMQP channels
 type Amqpbeat struct {
-	events publisher.Client
-	config cfg.Settings
-	stop   chan bool
+	config  cfg.Settings
+	events  publisher.Client
+	stopped bool
+	stop    chan bool
 }
 
 // Config extracts settings from the config file
@@ -29,7 +32,6 @@ func (ab *Amqpbeat) ConfigWithFile(b *beat.Beat, path string) error {
 	// Config loading goes here
 	err := cfgfile.Read(&ab.config, path)
 	utils.FailOnError(err, "Error reading configuration file")
-	logp.Debug("amq", " is configured")
 	return nil
 }
 
@@ -37,15 +39,24 @@ func (ab *Amqpbeat) ConfigWithFile(b *beat.Beat, path string) error {
 func (ab *Amqpbeat) Setup(b *beat.Beat) error {
 	ab.events = b.Events
 	ab.stop = make(chan bool)
-	logp.Debug("ampqbeat", " is setup")
+
 	return nil
 }
 
 // Run ...
 func (ab *Amqpbeat) Run(b *beat.Beat) error {
-	for range ab.stop {
-		break
+	event := common.MapStr{
+		"@timestamp": common.Time(time.Now()),
+		"type":       "test",
+		"payload":    "test",
 	}
+
+	go ab.events.PublishEvents([]common.MapStr{event}, nil)
+	select {
+	case <-ab.stop:
+	}
+
+	//fmt.Println("ab.events: %v", ab.events)
 	/*
 		for p := range payloads {
 			var event map[string]interface{}
@@ -68,5 +79,9 @@ func (ab *Amqpbeat) Cleanup(b *beat.Beat) error {
 
 // Stop ...
 func (ab *Amqpbeat) Stop() {
-	ab.stop <- true
+	if !ab.stopped {
+		ab.stopped = true
+		ab.stop <- true
+	}
+
 }

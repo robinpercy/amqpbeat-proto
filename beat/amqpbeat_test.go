@@ -43,51 +43,85 @@ func firehosePublisher(exch string, routingKey string, ch *amqp.Channel) {
 	}
 }
 
-func newBeat(cfgFile string) (*Amqpbeat, *beat.Beat) {
+func newBeat(cfgFile string, client *MockClient) (*Amqpbeat, *beat.Beat) {
 	wd, err := os.Getwd()
 	utils.FailOnError(err, "Could not determine working directory")
 
 	ab := &Amqpbeat{}
 	b := beat.NewBeat("amqpbeat", "0.0.0", ab)
 	ab.ConfigWithFile(b, fmt.Sprintf("%s/../test/config/%s", wd, cfgFile))
+
+	if client == nil {
+		client = &MockClient{
+			eventsPublished: func(event []common.MapStr, beat *Amqpbeat) {
+			},
+		}
+	}
+
+	client.beat = ab
+	b.Events = client
 	ab.Setup(b)
 
 	return ab, b
 }
 
-func runBeatWithTimeout(t *testing.T, cfgFile string, dur time.Duration,
+func runBeatAndWait(t *testing.T, cfgFile string, dur time.Duration,
 	client *MockClient) *Amqpbeat {
 
-	ab, b := newBeat(cfgFile)
+	completed := make(chan bool)
+	killed := make(chan bool)
+
+	ab, b := newBeat(cfgFile, client)
+
+	// Wait duration then send kill message
 	time.AfterFunc(dur, func() {
-		t.Error("Stopping beat since timeout exceeded ", dur)
-		ab.Stop()
+		killed <- true
+		close(killed)
 	})
 
-	if client != nil {
-		client.beat = ab
-		b.Events = client
-	}
+	// run to completion, then send completed message
+	go func() {
+		ab.Run(b)
+		completed <- true
+		close(completed)
+	}()
 
-	ab.Run(b)
+	// Block until job either completes or is killed
+	select {
+	case <-completed:
+	case <-killed:
+		t.Error("Stopping beat since timeout exceeded ", dur)
+		ab.Stop()
+	}
 
 	return ab
 }
 
 func TestCanStartAndStopBeat(t *testing.T) {
-	ab, b := newBeat("throttle_test.yml")
+	ab, b := newBeat("throttle_test.yml", nil)
 
-	stopped := false
-	time.AfterFunc(1*time.Second, func() {
-		if !stopped {
-			t.Error("Failed to stop beat in test. Ctrl+C may be necessary..")
-		}
+	stopped := make(chan bool)
+	killed := make(chan bool)
+	time.AfterFunc(5*time.Second, func() {
+		killed <- true
+		close(killed)
 	})
+
 	time.AfterFunc(500*time.Millisecond, func() {
 		ab.Stop()
 	})
-	ab.Run(b)
-	stopped = true
+
+	go func() {
+		ab.Run(b)
+		stopped <- true
+		close(stopped)
+	}()
+
+	select {
+	case <-stopped:
+	case <-killed:
+		t.Error("Failed to stop beat in test. Ctrl+C may be necessary..")
+	}
 }
 
 func TestCanReceiveMessage(t *testing.T) {
@@ -95,22 +129,27 @@ func TestCanReceiveMessage(t *testing.T) {
 	defer conn.Close()
 	defer ch.Close()
 
-	p := &Publisher{exch: "", routingKey: "test"}
-	_, err := ch.QueueDeclare(p.routingKey, false, true, false, false, nil)
-	utils.FailOnError(err, "Failed to declare queue")
+	p := newPublisher("", "tets", ch)
 	p.send(ch, "This is a test")
 
 	received := false
 	client := &MockClient{
-		eventsPublished: func(events []common.MapStr, beat *Amqpbeat) {
+		eventsPublished: func(events []common.MapStr, ab *Amqpbeat) {
 			received = true
-			beat.Stop()
+			ab.Stop()
 		},
 	}
-	runBeatWithTimeout(t, "throttle_test.yml", 5*time.Second, client)
+	runBeatAndWait(t, "throttle_test.yml", 10*time.Second, client)
+
 	if !received {
 		t.Errorf("Expected a message but did not receive one")
 	}
+}
+
+func newPublisher(exch string, routingKey string, ch *amqp.Channel) *Publisher {
+	_, err := ch.QueueDeclare(routingKey, false, true, false, false, nil)
+	utils.FailOnError(err, fmt.Sprintf("Failed to declare queue %s", routingKey))
+	return &Publisher{exch: exch, routingKey: routingKey, ch: ch}
 }
 
 func amqpConnect() (*amqp.Connection, *amqp.Channel) {
@@ -124,6 +163,7 @@ func amqpConnect() (*amqp.Connection, *amqp.Channel) {
 }
 
 type Publisher struct {
+	ch         *amqp.Channel
 	exch       string
 	routingKey string
 }
